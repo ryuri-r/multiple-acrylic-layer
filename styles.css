@@ -202,6 +202,7 @@ h1,
 .layer-list {
   display: grid;
   gap: 10px;
+  margin-top: 10px;
 }
 
 .layer-card {
@@ -426,20 +427,44 @@ input[type="range"] {
   color: var(--accent);
 }
 
+.add-image-button,
 .add-layer-button {
   width: 100%;
-  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-top: 12px;
-  border: 1px solid var(--ink);
   border-radius: 10px;
-  color: var(--ink);
-  background: white;
   font-size: 11px;
   font-weight: 700;
+}
+
+.add-image-button {
+  min-height: 54px;
+  flex-wrap: wrap;
+  border: 1px solid var(--ink);
+  color: white;
+  background: var(--ink);
+}
+
+.add-image-button small {
+  width: 100%;
+  margin-top: -8px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 8px;
+  font-weight: 500;
+}
+
+.add-image-button:hover {
+  background: #303236;
+}
+
+.add-layer-button {
+  min-height: 44px;
+  margin-top: 12px;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  background: white;
 }
 
 .add-layer-button:hover,
@@ -448,6 +473,7 @@ input[type="range"] {
   background: var(--ink);
 }
 
+.add-image-button span,
 .add-layer-button span,
 .add-side-button span {
   font-size: 17px;
@@ -694,13 +720,21 @@ input[type="range"] {
   position: absolute;
   top: 50%;
   left: 50%;
+  padding: 18px 24px;
   display: grid;
   gap: 5px;
+  border: 1px dashed transparent;
+  border-radius: 12px;
   color: #72777d;
+  background: transparent;
   text-align: center;
-  pointer-events: none;
   transform: translate(-50%, -50%);
-  transition: opacity 200ms ease;
+  transition: opacity 200ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.stage-empty:hover {
+  border-color: #c7cbd0;
+  background: rgba(255, 255, 255, 0.55);
 }
 
 .stage-empty strong {
@@ -714,6 +748,7 @@ input[type="range"] {
 
 .stage-empty.is-hidden {
   opacity: 0;
+  pointer-events: none;
 }
 
 .stage-hint {

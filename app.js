@@ -35,6 +35,8 @@ const elements = {
   layerTemplate: document.querySelector("#layerTemplate"),
   sideTemplate: document.querySelector("#sideTemplate"),
   sideList: document.querySelector("#sideList"),
+  multiImageInput: document.querySelector("#multiImageInput"),
+  addImagesButton: document.querySelector("#addImagesButton"),
   addLayerButton: document.querySelector("#addLayerButton"),
   addSideButton: document.querySelector("#addSideButton"),
   sideMenu: document.querySelector("#sideMenu"),
@@ -503,6 +505,25 @@ function loadImageForLayer(id, file) {
   });
 }
 
+function addImageFiles(files) {
+  const imageFiles = [...files].filter((file) => file.type.startsWith("image/"));
+  if (!imageFiles.length) return;
+
+  const availableLayers = state.layers.filter((layer) => !layer.imageUrl && !layer.texture);
+  imageFiles.forEach((file, index) => {
+    let layer = availableLayers[index];
+    if (!layer) {
+      if (state.layers.length >= MAX_LAYERS) return;
+      layer = createLayerData();
+      state.layers.push(layer);
+    }
+    loadImageForLayer(layer.id, file);
+  });
+
+  renderLayerList();
+  rebuildScene();
+}
+
 function loadImageForSide(type, file) {
   if (!file.type.startsWith("image/")) return;
   const side = state.sides.find((item) => item.type === type);
@@ -806,6 +827,12 @@ function resizeRenderer() {
 }
 
 elements.addLayerButton.addEventListener("click", addLayer);
+elements.addImagesButton.addEventListener("click", () => elements.multiImageInput.click());
+elements.stageEmpty.addEventListener("click", () => elements.multiImageInput.click());
+elements.multiImageInput.addEventListener("change", () => {
+  addImageFiles(elements.multiImageInput.files);
+  elements.multiImageInput.value = "";
+});
 elements.addSideButton.addEventListener("click", () => {
   elements.sideMenu.hidden = !elements.sideMenu.hidden;
 });

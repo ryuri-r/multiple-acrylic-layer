@@ -32,11 +32,18 @@
 
         <p class="panel-copy">1면이 가장 앞입니다. 이미지를 올리고 필요한 만큼 면을 추가하세요.</p>
 
+        <input id="multiImageInput" type="file" accept="image/png,image/webp,image/jpeg" multiple hidden>
+        <button class="add-image-button" id="addImagesButton" type="button">
+          <span aria-hidden="true">+</span>
+          이미지 추가
+          <small>여러 장 선택 가능</small>
+        </button>
+
         <div class="layer-list" id="layerList"></div>
 
         <button class="add-layer-button" id="addLayerButton" type="button">
           <span aria-hidden="true">+</span>
-          면 추가
+          빈 면 추가
         </button>
 
         <div class="side-builder">
@@ -72,10 +79,10 @@
 
         <div class="stage-wrap" id="stageWrap">
           <canvas id="stageCanvas" aria-label="아크릴 레이어 3D 미리보기"></canvas>
-          <div class="stage-empty" id="stageEmpty">
+          <button class="stage-empty" id="stageEmpty" type="button">
             <strong>1면에 이미지를 올려보세요</strong>
-            <span>투명 PNG를 권장합니다</span>
-          </div>
+            <span>클릭해서 이미지 추가 · 여러 장 선택 가능</span>
+          </button>
           <div class="stage-hint">드래그 회전 · 휠 확대</div>
         </div>
 
