@@ -857,4 +857,180 @@ function downloadBlob(blob, fileName) {
 }
 
 function nextFrame() {
-  return new Prom
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+async function exportGif() {
+  const button = elements.exportGifButton;
+  const originalText = button.textContent;
+  const originalPosition = camera.position.clone();
+  const originalTarget = controls.target.clone();
+  const originalSize = new THREE.Vector2();
+  renderer.getSize(originalSize);
+  const originalPixelRatio = renderer.getPixelRatio();
+  const motion = elements.gifMotionSelect.value;
+  const frameCount = motion === "spin" ? 48 : 36;
+  const outputSize = 540;
+  const radius = camera.position.distanceTo(controls.target);
+  const verticalAngle = Math.asin((camera.position.y - controls.target.y) / radius);
+  const horizontalRadius = Math.cos(verticalAngle) * radius;
+  const centerAngle = Math.atan2(
+    camera.position.x - controls.target.x,
+    camera.position.z - controls.target.z,
+  );
+
+  button.disabled = true;
+  elements.exportButton.disabled = true;
+  controls.enabled = false;
+  renderer.setPixelRatio(1);
+  renderer.setSize(outputSize, outputSize, false);
+  camera.aspect = 1;
+  camera.updateProjectionMatrix();
+
+  const gif = GIFEncoder();
+  const captureCanvas = document.createElement("canvas");
+  captureCanvas.width = outputSize;
+  captureCanvas.height = outputSize;
+  const captureContext = captureCanvas.getContext("2d", { willReadFrequently: true });
+
+  try {
+    for (let index = 0; index < frameCount; index += 1) {
+      const progress = index / frameCount;
+      let angle;
+      if (motion === "spin") {
+        angle = centerAngle + progress * Math.PI * 2;
+      } else {
+        const swing = Math.sin(progress * Math.PI * 2);
+        angle = centerAngle + THREE.MathUtils.degToRad(35) * swing;
+      }
+
+      camera.position.set(
+        controls.target.x + Math.sin(angle) * horizontalRadius,
+        controls.target.y + Math.sin(verticalAngle) * radius,
+        controls.target.z + Math.cos(angle) * horizontalRadius,
+      );
+      camera.lookAt(controls.target);
+      renderer.render(scene, camera);
+      await nextFrame();
+
+      captureContext.clearRect(0, 0, outputSize, outputSize);
+      captureContext.drawImage(renderer.domElement, 0, 0, outputSize, outputSize);
+      const imageData = captureContext.getImageData(0, 0, outputSize, outputSize);
+      const palette = quantize(imageData.data, 256, { format: "rgb565" });
+      const indexed = applyPalette(imageData.data, palette, "rgb565");
+      gif.writeFrame(indexed, outputSize, outputSize, {
+        palette,
+        delay: motion === "spin" ? 70 : 80,
+        repeat: 0,
+      });
+      button.textContent = `GIF ${index + 1}/${frameCount}`;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    gif.finish();
+    downloadBlob(
+      new Blob([gif.bytes()], { type: "image/gif" }),
+      `acrylic-layer-${motion}-${new Date().toISOString().slice(0, 10)}.gif`,
+    );
+  } finally {
+    camera.position.copy(originalPosition);
+    controls.target.copy(originalTarget);
+    controls.enabled = true;
+    renderer.setPixelRatio(originalPixelRatio);
+    renderer.setSize(originalSize.x, originalSize.y, false);
+    camera.aspect = originalSize.x / originalSize.y;
+    camera.updateProjectionMatrix();
+    controls.update();
+    button.disabled = false;
+    elements.exportButton.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+function resizeRenderer() {
+  const width = elements.stageWrap.clientWidth;
+  const height = elements.stageWrap.clientHeight;
+  if (!width || !height) return;
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+}
+
+elements.addLayerButton.addEventListener("click", addLayer);
+elements.multiImageInput.addEventListener("change", () => {
+  addImageFiles(elements.multiImageInput.files);
+  elements.multiImageInput.value = "";
+});
+elements.exportButton.addEventListener("click", exportImage);
+elements.exportGifButton.addEventListener("click", exportGif);
+elements.resetProjectButton.addEventListener("click", resetProject);
+
+elements.viewButtons.forEach((button) => {
+  button.addEventListener("click", () => setCameraView(button.dataset.view));
+});
+
+elements.presetSelect.addEventListener("change", () => {
+  const presets = {
+    "90x135": [90, 135],
+    "135x90": [135, 90],
+    "100x100": [100, 100],
+  };
+  if (presets[elements.presetSelect.value]) {
+    setDimensions(...presets[elements.presetSelect.value]);
+  }
+});
+
+function updateAutoSizeControls() {
+  state.autoSize = elements.autoSizeToggle.checked;
+  elements.manualSizeGroup.classList.toggle("is-disabled", state.autoSize);
+}
+
+elements.autoSizeToggle.addEventListener("change", () => {
+  updateAutoSizeControls();
+  if (state.autoSize) applyAutomaticDimensions();
+});
+
+elements.longSideInput.addEventListener("change", () => {
+  state.longSide = Number(elements.longSideInput.value) || DEFAULTS.longSide;
+  if (state.autoSize) applyAutomaticDimensions();
+});
+
+elements.cutlineSelect.addEventListener("change", () => {
+  state.cutline = Number(elements.cutlineSelect.value);
+  if (state.autoSize) applyAutomaticDimensions();
+  else rebuildScene();
+});
+
+[elements.widthInput, elements.heightInput].forEach((input) => {
+  input.addEventListener("change", () => {
+    elements.presetSelect.value = "custom";
+    setDimensions(elements.widthInput.value, elements.heightInput.value);
+  });
+});
+
+[
+  elements.thicknessRange,
+  elements.gapRange,
+  elements.explodeRange,
+  elements.acrylicRange,
+  elements.backgroundColor,
+].forEach((input) => input.addEventListener("input", updateSettingsFromInputs));
+
+window.addEventListener("resize", resizeRenderer);
+
+const resizeObserver = new ResizeObserver(resizeRenderer);
+resizeObserver.observe(elements.stageWrap);
+
+function animate() {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+state.layers.push(createLayerData());
+renderLayerList();
+updateAutoSizeControls();
+updateSettingsFromInputs();
+resizeRenderer();
+setCameraView("front", false);
+animate();
