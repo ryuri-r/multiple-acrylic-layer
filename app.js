@@ -29,6 +29,7 @@ const state = {
   longSide: DEFAULTS.longSide,
   autoSize: DEFAULTS.autoSize,
   sourceAspect: null,
+  sourceCrop: null,
   autoSizeSourceId: null,
   paletteApplied: false,
   nextId: 1,
@@ -68,7 +69,6 @@ const elements = {
   acrylicOutput: document.querySelector("#acrylicOutput"),
   backgroundColor: document.querySelector("#backgroundColor"),
   backgroundValue: document.querySelector("#backgroundValue"),
-  resetViewButton: document.querySelector("#resetViewButton"),
   resetProjectButton: document.querySelector("#resetProjectButton"),
   viewButtons: [...document.querySelectorAll("[data-view]")],
 };
@@ -121,6 +121,97 @@ scene.add(floor);
 const layerRoot = new THREE.Group();
 scene.add(layerRoot);
 
+// ── 그림 드래그 이동 ──────────────────────────────────────────
+const dragRaycaster = new THREE.Raycaster();
+const dragPointer = new THREE.Vector2();
+let dragSession = null;
+
+function setRayFromEvent(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  dragPointer.set(
+    ((event.clientX - rect.left) / rect.width) * 2 - 1,
+    -((event.clientY - rect.top) / rect.height) * 2 + 1,
+  );
+  dragRaycaster.setFromCamera(dragPointer, camera);
+}
+
+function maskAlphaAt(layer, uv) {
+  if (!layer.alphaMask || !uv) return 255;
+  const { data, width, height } = layer.alphaMask;
+  const x = Math.min(width - 1, Math.max(0, Math.floor(uv.x * width)));
+  const y = Math.min(height - 1, Math.max(0, Math.floor((1 - uv.y) * height)));
+  return data[y * width + x];
+}
+
+function rayPointAtZ(z) {
+  const { origin, direction } = dragRaycaster.ray;
+  if (Math.abs(direction.z) < 1e-6) return null;
+  const t = (z - origin.z) / direction.z;
+  if (t < 0) return null;
+  return origin.clone().addScaledVector(direction, t);
+}
+
+renderer.domElement.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
+  setRayFromEvent(event);
+  const hits = dragRaycaster.intersectObjects(artMeshes, false);
+  // 투명 픽셀 위는 통과시키고, 실제 그림이 그려진 첫 레이어를 잡는다
+  const hit = hits.find((item) => {
+    const layer = state.layers.find((l) => l.id === item.object.userData.layerId);
+    return layer && maskAlphaAt(layer, item.uv) > 16;
+  });
+  if (!hit) return;
+  const layer = state.layers.find((l) => l.id === hit.object.userData.layerId);
+  dragSession = {
+    layer,
+    mesh: hit.object,
+    planeZ: hit.point.z,
+    startPoint: hit.point.clone(),
+    startOffsetX: layer.offsetX,
+    startOffsetY: layer.offsetY,
+    baseX: hit.object.position.x - layer.offsetX,
+    baseY: hit.object.position.y - layer.offsetY,
+  };
+  controls.enabled = false;
+  renderer.domElement.setPointerCapture(event.pointerId);
+  renderer.domElement.style.cursor = "grabbing";
+});
+
+renderer.domElement.addEventListener("pointermove", (event) => {
+  if (!dragSession) return;
+  setRayFromEvent(event);
+  const point = rayPointAtZ(dragSession.planeZ);
+  if (!point) return;
+  dragSession.layer.offsetX = dragSession.startOffsetX + point.x - dragSession.startPoint.x;
+  dragSession.layer.offsetY = dragSession.startOffsetY + point.y - dragSession.startPoint.y;
+  dragSession.mesh.position.x = dragSession.baseX + dragSession.layer.offsetX;
+  dragSession.mesh.position.y = dragSession.baseY + dragSession.layer.offsetY;
+});
+
+function endDrag() {
+  if (!dragSession) return;
+  dragSession = null;
+  controls.enabled = true;
+  renderer.domElement.style.cursor = "";
+}
+renderer.domElement.addEventListener("pointerup", endDrag);
+renderer.domElement.addEventListener("pointercancel", endDrag);
+
+// 더블클릭으로 해당 레이어 위치 초기화
+renderer.domElement.addEventListener("dblclick", (event) => {
+  setRayFromEvent(event);
+  const hits = dragRaycaster.intersectObjects(artMeshes, false);
+  const hit = hits.find((item) => {
+    const layer = state.layers.find((l) => l.id === item.object.userData.layerId);
+    return layer && maskAlphaAt(layer, item.uv) > 16;
+  });
+  if (!hit) return;
+  const layer = state.layers.find((l) => l.id === hit.object.userData.layerId);
+  layer.offsetX = 0;
+  layer.offsetY = 0;
+  rebuildScene();
+});
+
 function createLayerData() {
   return {
     id: state.nextId++,
@@ -129,8 +220,12 @@ function createLayerData() {
     imageUrl: "",
     texture: null,
     contentAspect: null,
+    canvasAspect: null,
     crop: null,
+    alphaMask: null,
     scale: 1,
+    offsetX: 0,
+    offsetY: 0,
   };
 }
 
@@ -160,7 +255,10 @@ function disposeObject(object) {
   });
 }
 
+const artMeshes = [];
+
 function clearLayerRoot() {
+  artMeshes.length = 0;
   while (layerRoot.children.length) {
     const child = layerRoot.children.pop();
     disposeObject(child);
@@ -192,7 +290,6 @@ function createAcrylicObject(layer, index) {
   const acrylic = new THREE.Mesh(geometry, material);
   acrylic.castShadow = true;
   acrylic.receiveShadow = true;
-  acrylic.renderOrder = index * 10;
 
   const edgeGeometry = new THREE.EdgesGeometry(geometry, 20);
   const edgeMaterial = new THREE.LineBasicMaterial({
@@ -201,24 +298,40 @@ function createAcrylicObject(layer, index) {
     opacity: 0.28 + state.acrylicOpacity * 0.35,
   });
   const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial);
-  edges.renderOrder = index * 10 + 1;
 
   const group = new THREE.Group();
   group.add(acrylic, edges);
   group.visible = layer.visible;
 
   if (layer.texture) {
-    const imageAspect = layer.contentAspect || layer.texture.image.width / layer.texture.image.height;
     const printableWidth = Math.max(1, state.width - state.cutline * 2);
     const printableHeight = Math.max(1, state.height - state.cutline * 2);
-    const plateAspect = printableWidth / printableHeight;
-    let imageWidth = printableWidth;
-    let imageHeight = printableHeight;
+    let imageWidth;
+    let imageHeight;
+    let offsetX = 0;
+    let offsetY = 0;
 
-    if (imageAspect > plateAspect) {
-      imageHeight = printableWidth / imageAspect;
+    if (state.sourceCrop) {
+      // 공유 캔버스 좌표계: 기준(1번) 레이어의 그림 영역이 인쇄 영역에 맞도록
+      // 전체 캔버스를 환산하고, 모든 레이어를 같은 캔버스 크기/위치로 배치한다.
+      const crop = state.sourceCrop;
+      // 업로드 타이밍에 따라 텍스처에 crop이 남아있을 수 있으므로 항상 초기화
+      layer.texture.offset.set(0, 0);
+      layer.texture.repeat.set(1, 1);
+      imageWidth = printableWidth / crop.width;
+      imageHeight = printableHeight / crop.height;
+      offsetX = -(crop.x + crop.width / 2 - 0.5) * imageWidth;
+      offsetY = -(crop.y + crop.height / 2 - 0.5) * imageHeight;
     } else {
-      imageWidth = printableHeight * imageAspect;
+      const imageAspect = layer.contentAspect || layer.texture.image.width / layer.texture.image.height;
+      const plateAspect = printableWidth / printableHeight;
+      imageWidth = printableWidth;
+      imageHeight = printableHeight;
+      if (imageAspect > plateAspect) {
+        imageHeight = printableWidth / imageAspect;
+      } else {
+        imageWidth = printableHeight * imageAspect;
+      }
     }
 
     imageWidth *= layer.scale;
@@ -227,14 +340,17 @@ function createAcrylicObject(layer, index) {
     const artMaterial = new THREE.MeshBasicMaterial({
       map: layer.texture,
       transparent: true,
-      alphaTest: 0.01,
+      alphaTest: 0.5,
       side: THREE.DoubleSide,
-      depthWrite: false,
+      depthWrite: true,
       toneMapped: false,
     });
     const art = new THREE.Mesh(new THREE.PlaneGeometry(imageWidth, imageHeight), artMaterial);
+    art.position.x = offsetX + layer.offsetX;
+    art.position.y = offsetY + layer.offsetY;
     art.position.z = state.thickness / 2 + 0.08;
-    art.renderOrder = index * 10 + 4;
+    art.userData.layerId = layer.id;
+    artMeshes.push(art);
     group.add(art);
   }
 
@@ -353,11 +469,10 @@ function loadImageForLayer(id, file) {
   analyzeImageFile(file)
     .then((analysis) => {
       layer.contentAspect = analysis.aspect;
+      layer.canvasAspect = analysis.canvasAspect;
       layer.crop = analysis.crop;
-      if (state.autoSize && !state.sourceAspect && state.autoSizeSourceId === layer.id) {
-        state.sourceAspect = analysis.aspect;
-        applyAutomaticDimensions();
-      }
+      layer.alphaMask = analysis.mask;
+      recomputeAutoSize();
       if (!state.paletteApplied && analysis.color && state.autoSizeSourceId === layer.id) {
         state.paletteApplied = true;
         applyPastelBackground(analysis.color);
@@ -374,9 +489,12 @@ function loadImageForLayer(id, file) {
       texture.encoding = THREE.sRGBEncoding;
       texture.minFilter = THREE.LinearFilter;
       texture.magFilter = THREE.LinearFilter;
-      if (layer.crop) {
+      if (layer.crop && !state.sourceCrop) {
         texture.offset.set(layer.crop.x, layer.crop.y);
         texture.repeat.set(layer.crop.width, layer.crop.height);
+      } else {
+        texture.offset.set(0, 0);
+        texture.repeat.set(1, 1);
       }
       texture.needsUpdate = true;
       layer.texture = texture;
@@ -449,8 +567,13 @@ async function analyzeImageFile(file) {
   const contentWidth = maxX >= minX ? maxX - minX + 1 : width;
   const contentHeight = maxY >= minY ? maxY - minY + 1 : height;
   const hasTransparentBounds = maxX >= minX && maxY >= minY;
+  const mask = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i += 1) mask[i] = pixels[i * 4 + 3];
+
   return {
     aspect: contentWidth / contentHeight,
+    canvasAspect: width / height,
+    mask: { data: mask, width, height },
     crop: hasTransparentBounds
       ? {
           x: minX / width,
@@ -477,6 +600,50 @@ function applyPastelBackground([red, green, blue]) {
   elements.backgroundColor.value = hex;
   scene.background.set(hex);
   elements.stageWrap.style.backgroundColor = hex;
+}
+
+function recomputeAutoSize() {
+  // 이미지가 있는 모든 레이어의 그림 영역(투명 제외)을 합친 박스 기준으로 판 크기 산출
+  const layersWithImage = state.layers.filter((item) => item.imageUrl || item.texture);
+  if (!layersWithImage.length) {
+    state.sourceCrop = null;
+    state.sourceAspect = null;
+    rebuildScene();
+    return;
+  }
+  let minX = 1;
+  let minY = 1;
+  let maxX = 0;
+  let maxY = 0;
+  layersWithImage.forEach((item) => {
+    const crop = item.crop || { x: 0, y: 0, width: 1, height: 1 };
+    minX = Math.min(minX, crop.x);
+    minY = Math.min(minY, crop.y);
+    maxX = Math.max(maxX, crop.x + crop.width);
+    maxY = Math.max(maxY, crop.y + crop.height);
+  });
+  const union = {
+    x: minX,
+    y: minY,
+    width: Math.max(0.001, maxX - minX),
+    height: Math.max(0.001, maxY - minY),
+  };
+  const canvasAspect = layersWithImage.find((item) => item.canvasAspect)?.canvasAspect || 1;
+  const aspect = (union.width / union.height) * canvasAspect;
+  const changed =
+    !state.sourceCrop ||
+    Math.abs(aspect - state.sourceAspect) > 0.0001 ||
+    Math.abs(union.x - state.sourceCrop.x) > 0.0001 ||
+    Math.abs(union.y - state.sourceCrop.y) > 0.0001 ||
+    Math.abs(union.width - state.sourceCrop.width) > 0.0001 ||
+    Math.abs(union.height - state.sourceCrop.height) > 0.0001;
+  state.sourceCrop = union;
+  state.sourceAspect = aspect;
+  if (changed && state.autoSize) {
+    applyAutomaticDimensions();
+  } else {
+    rebuildScene();
+  }
 }
 
 function applyAutomaticDimensions() {
@@ -544,7 +711,7 @@ function removeLayer(id) {
     if (removed?.texture) removed.texture.dispose();
   }
   renderLayerList();
-  rebuildScene();
+  recomputeAutoSize();
 }
 
 function reorderLayer(sourceId, targetId) {
@@ -651,6 +818,7 @@ function resetProject() {
     longSide: DEFAULTS.longSide,
     autoSize: DEFAULTS.autoSize,
     sourceAspect: null,
+    sourceCrop: null,
     autoSizeSourceId: null,
     paletteApplied: false,
   });
@@ -689,181 +857,4 @@ function downloadBlob(blob, fileName) {
 }
 
 function nextFrame() {
-  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-}
-
-async function exportGif() {
-  const button = elements.exportGifButton;
-  const originalText = button.textContent;
-  const originalPosition = camera.position.clone();
-  const originalTarget = controls.target.clone();
-  const originalSize = new THREE.Vector2();
-  renderer.getSize(originalSize);
-  const originalPixelRatio = renderer.getPixelRatio();
-  const motion = elements.gifMotionSelect.value;
-  const frameCount = motion === "spin" ? 48 : 36;
-  const outputSize = 540;
-  const radius = camera.position.distanceTo(controls.target);
-  const verticalAngle = Math.asin((camera.position.y - controls.target.y) / radius);
-  const horizontalRadius = Math.cos(verticalAngle) * radius;
-  const centerAngle = Math.atan2(
-    camera.position.x - controls.target.x,
-    camera.position.z - controls.target.z,
-  );
-
-  button.disabled = true;
-  elements.exportButton.disabled = true;
-  controls.enabled = false;
-  renderer.setPixelRatio(1);
-  renderer.setSize(outputSize, outputSize, false);
-  camera.aspect = 1;
-  camera.updateProjectionMatrix();
-
-  const gif = GIFEncoder();
-  const captureCanvas = document.createElement("canvas");
-  captureCanvas.width = outputSize;
-  captureCanvas.height = outputSize;
-  const captureContext = captureCanvas.getContext("2d", { willReadFrequently: true });
-
-  try {
-    for (let index = 0; index < frameCount; index += 1) {
-      const progress = index / frameCount;
-      let angle;
-      if (motion === "spin") {
-        angle = centerAngle + progress * Math.PI * 2;
-      } else {
-        const swing = Math.sin(progress * Math.PI * 2);
-        angle = centerAngle + THREE.MathUtils.degToRad(35) * swing;
-      }
-
-      camera.position.set(
-        controls.target.x + Math.sin(angle) * horizontalRadius,
-        controls.target.y + Math.sin(verticalAngle) * radius,
-        controls.target.z + Math.cos(angle) * horizontalRadius,
-      );
-      camera.lookAt(controls.target);
-      renderer.render(scene, camera);
-      await nextFrame();
-
-      captureContext.clearRect(0, 0, outputSize, outputSize);
-      captureContext.drawImage(renderer.domElement, 0, 0, outputSize, outputSize);
-      const imageData = captureContext.getImageData(0, 0, outputSize, outputSize);
-      const palette = quantize(imageData.data, 256, { format: "rgb565" });
-      const indexed = applyPalette(imageData.data, palette, "rgb565");
-      gif.writeFrame(indexed, outputSize, outputSize, {
-        palette,
-        delay: motion === "spin" ? 70 : 80,
-        repeat: 0,
-      });
-      button.textContent = `GIF ${index + 1}/${frameCount}`;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-
-    gif.finish();
-    downloadBlob(
-      new Blob([gif.bytes()], { type: "image/gif" }),
-      `acrylic-layer-${motion}-${new Date().toISOString().slice(0, 10)}.gif`,
-    );
-  } finally {
-    camera.position.copy(originalPosition);
-    controls.target.copy(originalTarget);
-    controls.enabled = true;
-    renderer.setPixelRatio(originalPixelRatio);
-    renderer.setSize(originalSize.x, originalSize.y, false);
-    camera.aspect = originalSize.x / originalSize.y;
-    camera.updateProjectionMatrix();
-    controls.update();
-    button.disabled = false;
-    elements.exportButton.disabled = false;
-    button.textContent = originalText;
-  }
-}
-
-function resizeRenderer() {
-  const width = elements.stageWrap.clientWidth;
-  const height = elements.stageWrap.clientHeight;
-  if (!width || !height) return;
-  renderer.setSize(width, height, false);
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
-}
-
-elements.addLayerButton.addEventListener("click", addLayer);
-elements.multiImageInput.addEventListener("change", () => {
-  addImageFiles(elements.multiImageInput.files);
-  elements.multiImageInput.value = "";
-});
-elements.exportButton.addEventListener("click", exportImage);
-elements.exportGifButton.addEventListener("click", exportGif);
-elements.resetViewButton.addEventListener("click", () => setCameraView("front"));
-elements.resetProjectButton.addEventListener("click", resetProject);
-
-elements.viewButtons.forEach((button) => {
-  button.addEventListener("click", () => setCameraView(button.dataset.view));
-});
-
-elements.presetSelect.addEventListener("change", () => {
-  const presets = {
-    "90x135": [90, 135],
-    "135x90": [135, 90],
-    "100x100": [100, 100],
-  };
-  if (presets[elements.presetSelect.value]) {
-    setDimensions(...presets[elements.presetSelect.value]);
-  }
-});
-
-function updateAutoSizeControls() {
-  state.autoSize = elements.autoSizeToggle.checked;
-  elements.manualSizeGroup.classList.toggle("is-disabled", state.autoSize);
-}
-
-elements.autoSizeToggle.addEventListener("change", () => {
-  updateAutoSizeControls();
-  if (state.autoSize) applyAutomaticDimensions();
-});
-
-elements.longSideInput.addEventListener("change", () => {
-  state.longSide = Number(elements.longSideInput.value) || DEFAULTS.longSide;
-  if (state.autoSize) applyAutomaticDimensions();
-});
-
-elements.cutlineSelect.addEventListener("change", () => {
-  state.cutline = Number(elements.cutlineSelect.value);
-  if (state.autoSize) applyAutomaticDimensions();
-  else rebuildScene();
-});
-
-[elements.widthInput, elements.heightInput].forEach((input) => {
-  input.addEventListener("change", () => {
-    elements.presetSelect.value = "custom";
-    setDimensions(elements.widthInput.value, elements.heightInput.value);
-  });
-});
-
-[
-  elements.thicknessRange,
-  elements.gapRange,
-  elements.explodeRange,
-  elements.acrylicRange,
-  elements.backgroundColor,
-].forEach((input) => input.addEventListener("input", updateSettingsFromInputs));
-
-window.addEventListener("resize", resizeRenderer);
-
-const resizeObserver = new ResizeObserver(resizeRenderer);
-resizeObserver.observe(elements.stageWrap);
-
-function animate() {
-  controls.update();
-  renderer.render(scene, camera);
-  requestAnimationFrame(animate);
-}
-
-state.layers.push(createLayerData());
-renderLayerList();
-updateAutoSizeControls();
-updateSettingsFromInputs();
-resizeRenderer();
-setCameraView("front", false);
-animate();
+  return new Prom
