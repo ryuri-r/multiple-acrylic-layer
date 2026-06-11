@@ -1,0 +1,4 @@
+node_modules/
+qa-*.png
+qa.mjs
+server.*.log
