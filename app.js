@@ -7,15 +7,17 @@ const DEFAULTS = {
   width: 90,
   height: 135,
   thickness: 3,
-  gap: 6,
+  gap: 0,
   explode: 0,
   acrylicOpacity: 0.35,
   background: "#eef0f2",
+  cutline: 2,
+  longSide: 135,
+  autoSize: true,
 };
 
 const state = {
   layers: [],
-  sides: [],
   width: DEFAULTS.width,
   height: DEFAULTS.height,
   thickness: DEFAULTS.thickness,
@@ -23,6 +25,12 @@ const state = {
   explode: DEFAULTS.explode,
   acrylicOpacity: DEFAULTS.acrylicOpacity,
   background: DEFAULTS.background,
+  cutline: DEFAULTS.cutline,
+  longSide: DEFAULTS.longSide,
+  autoSize: DEFAULTS.autoSize,
+  sourceAspect: null,
+  autoSizeSourceId: null,
+  paletteApplied: false,
   nextId: 1,
   draggedId: null,
 };
@@ -33,13 +41,9 @@ const elements = {
   stageEmpty: document.querySelector("#stageEmpty"),
   layerList: document.querySelector("#layerList"),
   layerTemplate: document.querySelector("#layerTemplate"),
-  sideTemplate: document.querySelector("#sideTemplate"),
-  sideList: document.querySelector("#sideList"),
   multiImageInput: document.querySelector("#multiImageInput"),
   addImagesButton: document.querySelector("#addImagesButton"),
   addLayerButton: document.querySelector("#addLayerButton"),
-  addSideButton: document.querySelector("#addSideButton"),
-  sideMenu: document.querySelector("#sideMenu"),
   layerCount: document.querySelector("#layerCount"),
   previewTitle: document.querySelector("#previewTitle"),
   visibleStatus: document.querySelector("#visibleStatus"),
@@ -47,6 +51,10 @@ const elements = {
   exportButton: document.querySelector("#exportButton"),
   exportGifButton: document.querySelector("#exportGifButton"),
   gifMotionSelect: document.querySelector("#gifMotionSelect"),
+  autoSizeToggle: document.querySelector("#autoSizeToggle"),
+  longSideInput: document.querySelector("#longSideInput"),
+  cutlineSelect: document.querySelector("#cutlineSelect"),
+  manualSizeGroup: document.querySelector(".manual-size-group"),
   presetSelect: document.querySelector("#presetSelect"),
   widthInput: document.querySelector("#widthInput"),
   heightInput: document.querySelector("#heightInput"),
@@ -113,9 +121,6 @@ scene.add(floor);
 const layerRoot = new THREE.Group();
 scene.add(layerRoot);
 
-const sideRoot = new THREE.Group();
-scene.add(sideRoot);
-
 function createLayerData() {
   return {
     id: state.nextId++,
@@ -123,18 +128,9 @@ function createLayerData() {
     fileName: "",
     imageUrl: "",
     texture: null,
+    contentAspect: null,
+    crop: null,
     scale: 1,
-  };
-}
-
-function createSideData(type) {
-  return {
-    id: `side-${type}`,
-    type,
-    visible: true,
-    fileName: "",
-    imageUrl: "",
-    texture: null,
   };
 }
 
@@ -167,13 +163,6 @@ function disposeObject(object) {
 function clearLayerRoot() {
   while (layerRoot.children.length) {
     const child = layerRoot.children.pop();
-    disposeObject(child);
-  }
-}
-
-function clearSideRoot() {
-  while (sideRoot.children.length) {
-    const child = sideRoot.children.pop();
     disposeObject(child);
   }
 }
@@ -219,15 +208,17 @@ function createAcrylicObject(layer, index) {
   group.visible = layer.visible;
 
   if (layer.texture) {
-    const imageAspect = layer.texture.image.width / layer.texture.image.height;
-    const plateAspect = state.width / state.height;
-    let imageWidth = state.width;
-    let imageHeight = state.height;
+    const imageAspect = layer.contentAspect || layer.texture.image.width / layer.texture.image.height;
+    const printableWidth = Math.max(1, state.width - state.cutline * 2);
+    const printableHeight = Math.max(1, state.height - state.cutline * 2);
+    const plateAspect = printableWidth / printableHeight;
+    let imageWidth = printableWidth;
+    let imageHeight = printableHeight;
 
     if (imageAspect > plateAspect) {
-      imageHeight = state.width / imageAspect;
+      imageHeight = printableWidth / imageAspect;
     } else {
-      imageWidth = state.height * imageAspect;
+      imageWidth = printableHeight * imageAspect;
     }
 
     imageWidth *= layer.scale;
@@ -253,97 +244,9 @@ function createAcrylicObject(layer, index) {
   return group;
 }
 
-function fitTextureSize(texture, maxWidth, maxHeight) {
-  if (!texture) return [maxWidth, maxHeight];
-  const aspect = texture.image.width / texture.image.height;
-  const slotAspect = maxWidth / maxHeight;
-  if (aspect > slotAspect) return [maxWidth, maxWidth / aspect];
-  return [maxHeight * aspect, maxHeight];
-}
-
-function createSideObject(side) {
-  const fullDepth = Math.max(
-    state.thickness,
-    state.layers.length * state.thickness
-      + Math.max(0, state.layers.length - 1) * (state.gap + state.explode * 0.5),
-  );
-  const panelThickness = state.thickness;
-  const group = new THREE.Group();
-  const material = new THREE.MeshPhongMaterial({
-    color: 0xf8fcff,
-    transparent: true,
-    opacity: state.acrylicOpacity,
-    shininess: 100,
-    specular: 0xffffff,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
-
-  let geometry;
-  let artGeometry;
-  let artPosition = new THREE.Vector3();
-  let artRotation = new THREE.Euler();
-  let artMaxWidth;
-  let artMaxHeight;
-
-  if (side.type === "left" || side.type === "right") {
-    geometry = new THREE.BoxGeometry(panelThickness, state.height * 0.82, fullDepth);
-    group.position.x = (side.type === "left" ? -1 : 1) * (state.width / 2 + panelThickness / 2);
-    artMaxWidth = fullDepth;
-    artMaxHeight = state.height * 0.82;
-    const [artWidth, artHeight] = fitTextureSize(side.texture, artMaxWidth, artMaxHeight);
-    artGeometry = new THREE.PlaneGeometry(artWidth, artHeight);
-    artPosition.x = (side.type === "left" ? -1 : 1) * (panelThickness / 2 + 0.06);
-    artRotation.y = side.type === "left" ? -Math.PI / 2 : Math.PI / 2;
-  } else {
-    geometry = new THREE.BoxGeometry(state.width * 0.82, panelThickness, fullDepth);
-    group.position.y = (side.type === "bottom" ? -1 : 1) * (state.height / 2 + panelThickness / 2);
-    artMaxWidth = state.width * 0.82;
-    artMaxHeight = fullDepth;
-    const [artWidth, artHeight] = fitTextureSize(side.texture, artMaxWidth, artMaxHeight);
-    artGeometry = new THREE.PlaneGeometry(artWidth, artHeight);
-    artPosition.y = (side.type === "bottom" ? -1 : 1) * (panelThickness / 2 + 0.06);
-    artRotation.x = side.type === "bottom" ? Math.PI / 2 : -Math.PI / 2;
-  }
-
-  const panel = new THREE.Mesh(geometry, material);
-  panel.castShadow = true;
-  panel.receiveShadow = true;
-  group.add(panel);
-
-  const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(geometry),
-    new THREE.LineBasicMaterial({ color: 0x59636d, transparent: true, opacity: 0.34 }),
-  );
-  group.add(edges);
-
-  if (side.texture) {
-    const art = new THREE.Mesh(
-      artGeometry,
-      new THREE.MeshBasicMaterial({
-        map: side.texture,
-        transparent: true,
-        alphaTest: 0.01,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        toneMapped: false,
-      }),
-    );
-    art.position.copy(artPosition);
-    art.rotation.copy(artRotation);
-    art.renderOrder = 500;
-    group.add(art);
-  }
-
-  group.visible = side.visible;
-  return group;
-}
-
 function rebuildScene() {
   clearLayerRoot();
-  clearSideRoot();
   state.layers.forEach((layer, index) => layerRoot.add(createAcrylicObject(layer, index)));
-  state.sides.forEach((side) => sideRoot.add(createSideObject(side)));
   floor.position.y = -state.height * 0.63;
   updateStatus();
 }
@@ -376,7 +279,6 @@ function renderLayerList() {
       uploadButton.querySelector("b").textContent = "이미지 교체";
     }
 
-    uploadButton.addEventListener("click", () => fileInput.click());
     fileInput.addEventListener("change", () => {
       const [file] = fileInput.files;
       if (file) loadImageForLayer(layer.id, file);
@@ -437,52 +339,6 @@ function renderLayerList() {
   elements.addLayerButton.disabled = state.layers.length >= MAX_LAYERS;
 }
 
-function renderSideList() {
-  const labels = {
-    left: "왼쪽 옆면",
-    right: "오른쪽 옆면",
-    top: "위쪽 옆면",
-    bottom: "아래쪽 옆면",
-  };
-  elements.sideList.innerHTML = "";
-
-  state.sides.forEach((side) => {
-    const fragment = elements.sideTemplate.content.cloneNode(true);
-    const card = fragment.querySelector(".side-card");
-    const fileInput = fragment.querySelector(".side-file-input");
-    const uploadButton = fragment.querySelector(".side-upload-button");
-    const preview = fragment.querySelector(".side-upload-preview");
-    const visibilityInput = fragment.querySelector(".side-visibility-input");
-
-    card.dataset.side = side.type;
-    fragment.querySelector(".side-title").textContent = labels[side.type];
-    fragment.querySelector(".side-file").textContent = side.fileName || "이미지 없음";
-    visibilityInput.checked = side.visible;
-
-    if (side.imageUrl) {
-      preview.style.backgroundImage = `url("${side.imageUrl}")`;
-      uploadButton.querySelector("b").textContent = "옆면 이미지 교체";
-    }
-
-    uploadButton.addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", () => {
-      const [file] = fileInput.files;
-      if (file) loadImageForSide(side.type, file);
-    });
-    visibilityInput.addEventListener("change", () => {
-      side.visible = visibilityInput.checked;
-      rebuildScene();
-    });
-    fragment.querySelector(".side-remove-button").addEventListener("click", () => removeSide(side.type));
-    elements.sideList.append(fragment);
-  });
-
-  document.querySelectorAll("[data-add-side]").forEach((button) => {
-    button.disabled = state.sides.some((side) => side.type === button.dataset.addSide);
-  });
-  elements.addSideButton.disabled = state.sides.length === 4;
-}
-
 function loadImageForLayer(id, file) {
   if (!file.type.startsWith("image/")) return;
   const layer = state.layers.find((item) => item.id === id);
@@ -492,17 +348,156 @@ function loadImageForLayer(id, file) {
   layer.imageUrl = URL.createObjectURL(file);
   layer.fileName = file.name;
 
-  const loader = new THREE.TextureLoader();
-  loader.load(layer.imageUrl, (texture) => {
-    if (layer.texture) layer.texture.dispose();
-    texture.encoding = THREE.sRGBEncoding;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.needsUpdate = true;
-    layer.texture = texture;
-    renderLayerList();
-    rebuildScene();
-  });
+  if (!state.sourceAspect && !state.autoSizeSourceId) state.autoSizeSourceId = layer.id;
+
+  analyzeImageFile(file)
+    .then((analysis) => {
+      layer.contentAspect = analysis.aspect;
+      layer.crop = analysis.crop;
+      if (state.autoSize && !state.sourceAspect && state.autoSizeSourceId === layer.id) {
+        state.sourceAspect = analysis.aspect;
+        applyAutomaticDimensions();
+      }
+      if (!state.paletteApplied && analysis.color && state.autoSizeSourceId === layer.id) {
+        state.paletteApplied = true;
+        applyPastelBackground(analysis.color);
+      }
+    })
+    .catch(() => {
+      layer.contentAspect = null;
+      layer.crop = null;
+    })
+    .finally(() => {
+    const loader = new THREE.TextureLoader();
+    loader.load(layer.imageUrl, (texture) => {
+      if (layer.texture) layer.texture.dispose();
+      texture.encoding = THREE.sRGBEncoding;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      if (layer.crop) {
+        texture.offset.set(layer.crop.x, layer.crop.y);
+        texture.repeat.set(layer.crop.width, layer.crop.height);
+      }
+      texture.needsUpdate = true;
+      layer.texture = texture;
+      renderLayerList();
+      rebuildScene();
+    });
+    });
+}
+
+async function analyzeImageFile(file) {
+  let source;
+  let fallbackUrl;
+  if (typeof createImageBitmap === "function") {
+    source = await createImageBitmap(file);
+  } else {
+    fallbackUrl = URL.createObjectURL(file);
+    source = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = fallbackUrl;
+    });
+  }
+  const maxSample = 320;
+  const ratio = Math.min(1, maxSample / Math.max(source.width, source.height));
+  const width = Math.max(1, Math.round(source.width * ratio));
+  const height = Math.max(1, Math.round(source.height * ratio));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.drawImage(source, 0, 0, width, height);
+  source.close?.();
+  if (fallbackUrl) URL.revokeObjectURL(fallbackUrl);
+
+  const pixels = context.getImageData(0, 0, width, height).data;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  let colorCount = 0;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const alpha = pixels[index + 3];
+      if (alpha <= 16) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+      if (alpha > 96) {
+        const r = pixels[index];
+        const g = pixels[index + 1];
+        const b = pixels[index + 2];
+        const brightness = (r + g + b) / 3;
+        if (brightness > 28 && brightness < 242) {
+          red += r;
+          green += g;
+          blue += b;
+          colorCount += 1;
+        }
+      }
+    }
+  }
+
+  const contentWidth = maxX >= minX ? maxX - minX + 1 : width;
+  const contentHeight = maxY >= minY ? maxY - minY + 1 : height;
+  const hasTransparentBounds = maxX >= minX && maxY >= minY;
+  return {
+    aspect: contentWidth / contentHeight,
+    crop: hasTransparentBounds
+      ? {
+          x: minX / width,
+          y: 1 - (maxY + 1) / height,
+          width: contentWidth / width,
+          height: contentHeight / height,
+        }
+      : null,
+    color: colorCount
+      ? [Math.round(red / colorCount), Math.round(green / colorCount), Math.round(blue / colorCount)]
+      : null,
+  };
+}
+
+function applyPastelBackground([red, green, blue]) {
+  const mix = 0.82;
+  const pastel = [
+    Math.round(red * (1 - mix) + 255 * mix),
+    Math.round(green * (1 - mix) + 255 * mix),
+    Math.round(blue * (1 - mix) + 255 * mix),
+  ];
+  const hex = `#${pastel.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+  state.background = hex;
+  elements.backgroundColor.value = hex;
+  scene.background.set(hex);
+  elements.stageWrap.style.backgroundColor = hex;
+}
+
+function applyAutomaticDimensions() {
+  if (!state.sourceAspect) return;
+  const longSide = Math.max(20, Math.min(300, Number(state.longSide) || DEFAULTS.longSide));
+  let contentWidth;
+  let contentHeight;
+  if (state.sourceAspect >= 1) {
+    contentWidth = longSide;
+    contentHeight = longSide / state.sourceAspect;
+  } else {
+    contentHeight = longSide;
+    contentWidth = longSide * state.sourceAspect;
+  }
+  state.width = Number((contentWidth + state.cutline * 2).toFixed(1));
+  state.height = Number((contentHeight + state.cutline * 2).toFixed(1));
+  elements.widthInput.value = String(state.width);
+  elements.heightInput.value = String(state.height);
+  elements.presetSelect.value = "custom";
+  rebuildScene();
+  setCameraView("front", false);
 }
 
 function addImageFiles(files) {
@@ -517,48 +512,11 @@ function addImageFiles(files) {
       layer = createLayerData();
       state.layers.push(layer);
     }
+    if (!state.sourceAspect && !state.autoSizeSourceId) state.autoSizeSourceId = layer.id;
     loadImageForLayer(layer.id, file);
   });
 
   renderLayerList();
-  rebuildScene();
-}
-
-function loadImageForSide(type, file) {
-  if (!file.type.startsWith("image/")) return;
-  const side = state.sides.find((item) => item.type === type);
-  if (!side) return;
-  if (side.imageUrl) URL.revokeObjectURL(side.imageUrl);
-  side.imageUrl = URL.createObjectURL(file);
-  side.fileName = file.name;
-
-  new THREE.TextureLoader().load(side.imageUrl, (texture) => {
-    if (side.texture) side.texture.dispose();
-    texture.encoding = THREE.sRGBEncoding;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.needsUpdate = true;
-    side.texture = texture;
-    renderSideList();
-    rebuildScene();
-  });
-}
-
-function addSide(type) {
-  if (state.sides.some((side) => side.type === type)) return;
-  state.sides.push(createSideData(type));
-  elements.sideMenu.hidden = true;
-  renderSideList();
-  rebuildScene();
-}
-
-function removeSide(type) {
-  const index = state.sides.findIndex((side) => side.type === type);
-  if (index < 0) return;
-  const [removed] = state.sides.splice(index, 1);
-  if (removed.imageUrl) URL.revokeObjectURL(removed.imageUrl);
-  if (removed.texture) removed.texture.dispose();
-  renderSideList();
   rebuildScene();
 }
 
@@ -619,7 +577,7 @@ function setDimensions(width, height) {
   elements.widthInput.value = String(state.width);
   elements.heightInput.value = String(state.height);
   rebuildScene();
-  setCameraView("angle", false);
+  setCameraView("front", false);
 }
 
 function updateSettingsFromInputs() {
@@ -627,13 +585,13 @@ function updateSettingsFromInputs() {
   state.gap = Number(elements.gapRange.value);
   state.explode = Number(elements.explodeRange.value);
   state.acrylicOpacity = Number(elements.acrylicRange.value) / 100;
-  state.background = elements.backgroundColor.value;
+  state.background = elements.backgroundColor.value || state.background;
 
   elements.thicknessOutput.textContent = `${state.thickness} mm`;
   elements.gapOutput.textContent = `${state.gap} mm`;
   elements.explodeOutput.textContent = `${state.explode}%`;
   elements.acrylicOutput.textContent = `${Math.round(state.acrylicOpacity * 100)}%`;
-  elements.backgroundValue.textContent = state.background.toUpperCase();
+  if (elements.backgroundValue) elements.backgroundValue.textContent = state.background.toUpperCase();
 
   scene.background.set(state.background);
   elements.stageWrap.style.backgroundColor = state.background;
@@ -681,11 +639,6 @@ function resetProject() {
     if (layer.texture) layer.texture.dispose();
   });
   state.layers = [createLayerData()];
-  state.sides.forEach((side) => {
-    if (side.imageUrl) URL.revokeObjectURL(side.imageUrl);
-    if (side.texture) side.texture.dispose();
-  });
-  state.sides = [];
   Object.assign(state, {
     width: DEFAULTS.width,
     height: DEFAULTS.height,
@@ -694,6 +647,12 @@ function resetProject() {
     explode: DEFAULTS.explode,
     acrylicOpacity: DEFAULTS.acrylicOpacity,
     background: DEFAULTS.background,
+    cutline: DEFAULTS.cutline,
+    longSide: DEFAULTS.longSide,
+    autoSize: DEFAULTS.autoSize,
+    sourceAspect: null,
+    autoSizeSourceId: null,
+    paletteApplied: false,
   });
   elements.presetSelect.value = "90x135";
   elements.widthInput.value = String(DEFAULTS.width);
@@ -703,10 +662,13 @@ function resetProject() {
   elements.explodeRange.value = String(DEFAULTS.explode);
   elements.acrylicRange.value = String(DEFAULTS.acrylicOpacity * 100);
   elements.backgroundColor.value = DEFAULTS.background;
+  elements.autoSizeToggle.checked = DEFAULTS.autoSize;
+  elements.longSideInput.value = String(DEFAULTS.longSide);
+  elements.cutlineSelect.value = String(DEFAULTS.cutline);
+  updateAutoSizeControls();
   renderLayerList();
-  renderSideList();
   updateSettingsFromInputs();
-  setCameraView("angle");
+  setCameraView("front");
 }
 
 function exportImage() {
@@ -827,24 +789,13 @@ function resizeRenderer() {
 }
 
 elements.addLayerButton.addEventListener("click", addLayer);
-elements.addImagesButton.addEventListener("click", () => elements.multiImageInput.click());
-elements.stageEmpty.addEventListener("click", () => elements.multiImageInput.click());
 elements.multiImageInput.addEventListener("change", () => {
   addImageFiles(elements.multiImageInput.files);
   elements.multiImageInput.value = "";
 });
-elements.addSideButton.addEventListener("click", () => {
-  elements.sideMenu.hidden = !elements.sideMenu.hidden;
-});
-document.querySelectorAll("[data-add-side]").forEach((button) => {
-  button.addEventListener("click", () => addSide(button.dataset.addSide));
-});
-document.addEventListener("click", (event) => {
-  if (!event.target.closest(".side-builder")) elements.sideMenu.hidden = true;
-});
 elements.exportButton.addEventListener("click", exportImage);
 elements.exportGifButton.addEventListener("click", exportGif);
-elements.resetViewButton.addEventListener("click", () => setCameraView("angle"));
+elements.resetViewButton.addEventListener("click", () => setCameraView("front"));
 elements.resetProjectButton.addEventListener("click", resetProject);
 
 elements.viewButtons.forEach((button) => {
@@ -860,6 +811,27 @@ elements.presetSelect.addEventListener("change", () => {
   if (presets[elements.presetSelect.value]) {
     setDimensions(...presets[elements.presetSelect.value]);
   }
+});
+
+function updateAutoSizeControls() {
+  state.autoSize = elements.autoSizeToggle.checked;
+  elements.manualSizeGroup.classList.toggle("is-disabled", state.autoSize);
+}
+
+elements.autoSizeToggle.addEventListener("change", () => {
+  updateAutoSizeControls();
+  if (state.autoSize) applyAutomaticDimensions();
+});
+
+elements.longSideInput.addEventListener("change", () => {
+  state.longSide = Number(elements.longSideInput.value) || DEFAULTS.longSide;
+  if (state.autoSize) applyAutomaticDimensions();
+});
+
+elements.cutlineSelect.addEventListener("change", () => {
+  state.cutline = Number(elements.cutlineSelect.value);
+  if (state.autoSize) applyAutomaticDimensions();
+  else rebuildScene();
 });
 
 [elements.widthInput, elements.heightInput].forEach((input) => {
@@ -890,8 +862,8 @@ function animate() {
 
 state.layers.push(createLayerData());
 renderLayerList();
-renderSideList();
+updateAutoSizeControls();
 updateSettingsFromInputs();
 resizeRenderer();
-setCameraView("angle", false);
+setCameraView("front", false);
 animate();

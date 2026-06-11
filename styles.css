@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap");
-
 :root {
   --ink: #111214;
   --muted: #72777e;
@@ -9,7 +7,7 @@
   --stage: #eef0f2;
   --accent: #ee5b3e;
   --panel-width: 300px;
-  font-family: "DM Sans", "Noto Sans KR", sans-serif;
+  font-family: Inter, Pretendard, "Noto Sans KR", "Malgun Gothic", Arial, sans-serif;
   color: var(--ink);
   background: var(--paper);
   font-synthesis: none;
@@ -43,6 +41,15 @@ select,
 input[type="range"],
 input[type="color"] {
   cursor: pointer;
+}
+
+.native-file-input {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
 
 button:focus-visible,
@@ -314,7 +321,21 @@ h1,
 }
 
 .layer-upload {
+  position: relative;
   margin-top: 10px;
+}
+
+.file-input {
+  position: absolute;
+  z-index: 3;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-input {
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .upload-button {
@@ -445,6 +466,8 @@ input[type="range"] {
   border: 1px solid var(--ink);
   color: white;
   background: var(--ink);
+  cursor: pointer;
+  text-align: center;
 }
 
 .add-image-button small {
@@ -467,185 +490,16 @@ input[type="range"] {
   background: white;
 }
 
-.add-layer-button:hover,
-.add-side-button:hover {
+.add-layer-button:hover {
   color: white;
   background: var(--ink);
 }
 
 .add-image-button span,
-.add-layer-button span,
-.add-side-button span {
+.add-layer-button span {
   font-size: 17px;
   font-weight: 400;
   line-height: 1;
-}
-
-.side-builder {
-  position: relative;
-  margin-top: 8px;
-}
-
-.add-side-button {
-  width: 100%;
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: #555a60;
-  background: white;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.side-menu {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 6px);
-  right: 0;
-  left: 0;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-  padding: 7px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: white;
-  box-shadow: 0 12px 30px rgba(20, 25, 31, 0.14);
-}
-
-.side-menu:not([hidden]) {
-  display: grid;
-}
-
-.side-menu button {
-  padding: 9px;
-  border: 0;
-  border-radius: 7px;
-  color: #555a60;
-  background: #f3f4f5;
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.side-menu button:hover {
-  color: white;
-  background: var(--ink);
-}
-
-.side-menu button:disabled {
-  cursor: default;
-  opacity: 0.35;
-}
-
-.side-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.side-card {
-  padding: 11px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fbfbfb;
-}
-
-.side-card-heading {
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 30px;
-  align-items: center;
-  gap: 8px;
-}
-
-.side-card-heading > div {
-  min-width: 0;
-  display: grid;
-  gap: 1px;
-}
-
-.side-icon {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  display: block;
-  border: 1px solid #9da3aa;
-  border-radius: 4px;
-}
-
-.side-icon::after {
-  position: absolute;
-  inset: 5px;
-  border: 1px solid #c4c8cc;
-  content: "";
-}
-
-.side-title {
-  font-size: 11px;
-}
-
-.side-file {
-  overflow: hidden;
-  color: #90959b;
-  font-size: 8px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.side-upload-button {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  margin-top: 9px;
-  padding: 6px;
-  border: 1px dashed #cdd1d5;
-  border-radius: 8px;
-  color: var(--ink);
-  background: white;
-  text-align: left;
-}
-
-.side-upload-preview {
-  width: 38px;
-  height: 34px;
-  display: block;
-  border-radius: 4px;
-  background-color: #eef0f2;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
-}
-
-.side-upload-button > span:last-child {
-  display: grid;
-  gap: 2px;
-}
-
-.side-upload-button b {
-  font-size: 9px;
-}
-
-.side-upload-button small {
-  color: #969ba1;
-  font-size: 7px;
-}
-
-.side-remove-button {
-  display: block;
-  margin: 7px 0 0 auto;
-  padding: 0;
-  border: 0;
-  color: #8c9197;
-  background: none;
-  font-size: 8px;
-}
-
-.side-remove-button:hover {
-  color: var(--accent);
 }
 
 .local-notice {
@@ -730,6 +584,7 @@ input[type="range"] {
   text-align: center;
   transform: translate(-50%, -50%);
   transition: opacity 200ms ease, border-color 150ms ease, background 150ms ease;
+  cursor: pointer;
 }
 
 .stage-empty:hover {
@@ -800,6 +655,46 @@ input[type="range"] {
   color: #4f545a;
   font-size: 10px;
   font-weight: 600;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.switch-row > span {
+  display: grid;
+  gap: 3px;
+}
+
+.switch-row b {
+  font-size: 10px;
+}
+
+.switch-row small {
+  color: #8b9096;
+  font-size: 8px;
+}
+
+.switch-row input {
+  width: 34px;
+  height: 18px;
+  accent-color: var(--ink);
+}
+
+.manual-size-group.is-disabled {
+  opacity: 0.42;
+}
+
+.manual-size-group.is-disabled input,
+.manual-size-group.is-disabled select {
+  pointer-events: none;
+}
+
+.field-grid select {
+  height: 36px;
 }
 
 select {

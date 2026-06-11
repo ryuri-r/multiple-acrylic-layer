@@ -32,12 +32,12 @@
 
         <p class="panel-copy">1면이 가장 앞입니다. 이미지를 올리고 필요한 만큼 면을 추가하세요.</p>
 
-        <input id="multiImageInput" type="file" accept="image/png,image/webp,image/jpeg" multiple hidden>
-        <button class="add-image-button" id="addImagesButton" type="button">
+        <input class="native-file-input" id="multiImageInput" type="file" accept="image/png,image/webp,image/jpeg" multiple>
+        <label class="add-image-button" id="addImagesButton" for="multiImageInput">
           <span aria-hidden="true">+</span>
           이미지 추가
           <small>여러 장 선택 가능</small>
-        </button>
+        </label>
 
         <div class="layer-list" id="layerList"></div>
 
@@ -45,21 +45,6 @@
           <span aria-hidden="true">+</span>
           빈 면 추가
         </button>
-
-        <div class="side-builder">
-          <button class="add-side-button" id="addSideButton" type="button">
-            <span aria-hidden="true">+</span>
-            옆면 추가
-          </button>
-          <div class="side-menu" id="sideMenu" hidden>
-            <button type="button" data-add-side="left">왼쪽</button>
-            <button type="button" data-add-side="right">오른쪽</button>
-            <button type="button" data-add-side="top">위쪽</button>
-            <button type="button" data-add-side="bottom">아래쪽</button>
-          </div>
-        </div>
-
-        <div class="side-list" id="sideList"></div>
 
         <p class="local-notice">* 업로드 이미지는 서버에 저장되지 않고 로컬에서 돌아갑니다.</p>
       </aside>
@@ -71,18 +56,18 @@
             <h2 id="previewTitle">1 LAYER COMPOSITION</h2>
           </div>
           <div class="view-buttons" role="group" aria-label="카메라 시점">
-            <button type="button" data-view="front">정면</button>
-            <button type="button" data-view="angle" class="is-active">입체</button>
+            <button type="button" data-view="front" class="is-active">정면</button>
+            <button type="button" data-view="angle">입체</button>
             <button type="button" data-view="side">측면</button>
           </div>
         </div>
 
         <div class="stage-wrap" id="stageWrap">
           <canvas id="stageCanvas" aria-label="아크릴 레이어 3D 미리보기"></canvas>
-          <button class="stage-empty" id="stageEmpty" type="button">
+          <label class="stage-empty" id="stageEmpty" for="multiImageInput">
             <strong>1면에 이미지를 올려보세요</strong>
             <span>클릭해서 이미지 추가 · 여러 장 선택 가능</span>
-          </button>
+          </label>
           <div class="stage-hint">드래그 회전 · 휠 확대</div>
         </div>
 
@@ -101,7 +86,32 @@
         </div>
 
         <div class="settings-group">
-          <label class="field-label" for="presetSelect">크기 프리셋</label>
+          <label class="switch-row">
+            <span>
+              <b>첫 이미지에 맞춰 자동 크기</b>
+              <small>투명 영역을 제외한 그림 비율로 계산</small>
+            </span>
+            <input id="autoSizeToggle" type="checkbox" checked>
+          </label>
+
+          <div class="field-grid">
+            <label>
+              <span>그림 긴 변 기준</span>
+              <div class="number-field"><input id="longSideInput" type="number" min="20" max="300" value="135"><i>mm</i></div>
+            </label>
+            <label>
+              <span>칼선 여백</span>
+              <select id="cutlineSelect">
+                <option value="2" selected>2 mm</option>
+                <option value="0">0 mm</option>
+              </select>
+            </label>
+          </div>
+          <p class="setting-note">기본형은 살짝 둥근 직사각형입니다. 칼선 여백은 그림 사방에 적용됩니다.</p>
+        </div>
+
+        <div class="settings-group manual-size-group">
+          <label class="field-label" for="presetSelect">직접 크기 설정</label>
           <select id="presetSelect">
             <option value="90x135">세로 90 × 135 mm</option>
             <option value="135x90">가로 135 × 90 mm</option>
@@ -130,9 +140,9 @@
 
           <div class="range-heading">
             <label for="gapRange">면 사이 간격</label>
-            <output id="gapOutput">6 mm</output>
+            <output id="gapOutput">0 mm</output>
           </div>
-          <input id="gapRange" type="range" min="0" max="30" step="1" value="6">
+          <input id="gapRange" type="range" min="0" max="30" step="1" value="0">
 
           <div class="range-heading">
             <label for="explodeRange">분리해서 보기</label>
@@ -148,13 +158,8 @@
           </div>
           <input id="acrylicRange" type="range" min="0" max="80" step="1" value="35">
 
-          <label class="color-row" for="backgroundColor">
-            <span>배경색</span>
-            <span class="color-control">
-              <input id="backgroundColor" type="color" value="#eef0f2">
-              <i id="backgroundValue">#EEF0F2</i>
-            </span>
-          </label>
+          <input id="backgroundColor" type="color" value="#eef0f2" hidden>
+          <i id="backgroundValue" hidden>#EEF0F2</i>
         </div>
 
         <div class="settings-group">
@@ -163,7 +168,7 @@
             <option value="swing">Y축 좌우 왕복 · 권장</option>
             <option value="spin">Y축 360° 회전</option>
           </select>
-          <p class="setting-note">좌우 왕복은 정면 인쇄와 옆면을 자연스럽게 보여줍니다.</p>
+          <p class="setting-note">좌우 왕복은 여러 아크릴 면의 깊이 차이를 자연스럽게 보여줍니다.</p>
         </div>
 
         <div class="settings-group compact">
@@ -189,7 +194,7 @@
         </label>
       </div>
       <div class="layer-upload">
-        <input class="file-input" type="file" accept="image/png,image/webp,image/jpeg" hidden>
+        <input class="file-input" type="file" accept="image/png,image/webp,image/jpeg" aria-label="이 면에 이미지 업로드">
         <button class="upload-button" type="button">
           <span class="upload-preview"></span>
           <span class="upload-copy"><b>이미지 업로드</b><small>PNG · WEBP · JPG</small></span>
@@ -205,28 +210,6 @@
           <button class="remove-button" type="button">삭제</button>
         </div>
       </div>
-    </article>
-  </template>
-
-  <template id="sideTemplate">
-    <article class="side-card">
-      <div class="side-card-heading">
-        <span class="side-icon"></span>
-        <div>
-          <strong class="side-title"></strong>
-          <span class="side-file">이미지 없음</span>
-        </div>
-        <label class="visibility-toggle" title="옆면 표시">
-          <input class="side-visibility-input" type="checkbox" checked>
-          <span></span>
-        </label>
-      </div>
-      <input class="side-file-input" type="file" accept="image/png,image/webp,image/jpeg" hidden>
-      <button class="side-upload-button" type="button">
-        <span class="side-upload-preview"></span>
-        <span><b>옆면 이미지 업로드</b><small>PNG · WEBP · JPG</small></span>
-      </button>
-      <button class="side-remove-button" type="button">옆면 삭제</button>
     </article>
   </template>
 
