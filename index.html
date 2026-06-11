@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="투명 이미지를 여러 아크릴 면으로 쌓아 확인하는 3D 레이어 시뮬레이터">
+  <title>Multiple Acrylic Layer</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Multiple Acrylic Layer 홈">
+        <span>MULTIPLE ACRYLIC LAYER</span>
+      </a>
+      <div class="topbar-actions">
+        <span class="privacy-note">업로드 이미지는 서버에 저장되지 않습니다</span>
+        <button class="button button-light top-export" id="exportGifButton" type="button">GIF 저장</button>
+        <button class="button button-dark" id="exportButton" type="button">PNG 저장</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="panel panel-layers" aria-label="면 목록">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">LAYERS</p>
+            <h1>아크릴 면</h1>
+          </div>
+          <span class="count-badge" id="layerCount">1면</span>
+        </div>
+
+        <p class="panel-copy">1면이 가장 앞입니다. 이미지를 올리고 필요한 만큼 면을 추가하세요.</p>
+
+        <div class="layer-list" id="layerList"></div>
+
+        <button class="add-layer-button" id="addLayerButton" type="button">
+          <span aria-hidden="true">+</span>
+          면 추가
+        </button>
+
+        <div class="side-builder">
+          <button class="add-side-button" id="addSideButton" type="button">
+            <span aria-hidden="true">+</span>
+            옆면 추가
+          </button>
+          <div class="side-menu" id="sideMenu" hidden>
+            <button type="button" data-add-side="left">왼쪽</button>
+            <button type="button" data-add-side="right">오른쪽</button>
+            <button type="button" data-add-side="top">위쪽</button>
+            <button type="button" data-add-side="bottom">아래쪽</button>
+          </div>
+        </div>
+
+        <div class="side-list" id="sideList"></div>
+
+        <p class="local-notice">* 업로드 이미지는 서버에 저장되지 않고 로컬에서 돌아갑니다.</p>
+      </aside>
+
+      <section class="stage-section" aria-label="3D 미리보기">
+        <div class="stage-toolbar">
+          <div>
+            <p class="eyebrow">PREVIEW</p>
+            <h2 id="previewTitle">1 LAYER COMPOSITION</h2>
+          </div>
+          <div class="view-buttons" role="group" aria-label="카메라 시점">
+            <button type="button" data-view="front">정면</button>
+            <button type="button" data-view="angle" class="is-active">입체</button>
+            <button type="button" data-view="side">측면</button>
+          </div>
+        </div>
+
+        <div class="stage-wrap" id="stageWrap">
+          <canvas id="stageCanvas" aria-label="아크릴 레이어 3D 미리보기"></canvas>
+          <div class="stage-empty" id="stageEmpty">
+            <strong>1면에 이미지를 올려보세요</strong>
+            <span>투명 PNG를 권장합니다</span>
+          </div>
+          <div class="stage-hint">드래그 회전 · 휠 확대</div>
+        </div>
+
+        <div class="stage-status">
+          <span><i class="status-dot"></i><b id="visibleStatus">1</b>개 면 표시 중</span>
+          <span><b id="totalDepth">3</b> mm 총 두께</span>
+        </div>
+      </section>
+
+      <aside class="panel panel-settings" aria-label="제작 설정">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">BUILD</p>
+            <h2>제작 설정</h2>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <label class="field-label" for="presetSelect">크기 프리셋</label>
+          <select id="presetSelect">
+            <option value="90x135">세로 90 × 135 mm</option>
+            <option value="135x90">가로 135 × 90 mm</option>
+            <option value="100x100">정사각 100 × 100 mm</option>
+            <option value="custom">직접 입력</option>
+          </select>
+
+          <div class="field-grid">
+            <label>
+              <span>가로</span>
+              <div class="number-field"><input id="widthInput" type="number" min="30" max="300" value="90"><i>mm</i></div>
+            </label>
+            <label>
+              <span>세로</span>
+              <div class="number-field"><input id="heightInput" type="number" min="30" max="300" value="135"><i>mm</i></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="range-heading">
+            <label for="thicknessRange">아크릴 두께</label>
+            <output id="thicknessOutput">3 mm</output>
+          </div>
+          <input id="thicknessRange" type="range" min="1" max="10" step="0.5" value="3">
+
+          <div class="range-heading">
+            <label for="gapRange">면 사이 간격</label>
+            <output id="gapOutput">6 mm</output>
+          </div>
+          <input id="gapRange" type="range" min="0" max="30" step="1" value="6">
+
+          <div class="range-heading">
+            <label for="explodeRange">분리해서 보기</label>
+            <output id="explodeOutput">0%</output>
+          </div>
+          <input id="explodeRange" type="range" min="0" max="100" step="1" value="0">
+        </div>
+
+        <div class="settings-group">
+          <div class="range-heading">
+            <label for="acrylicRange">아크릴 표현</label>
+            <output id="acrylicOutput">35%</output>
+          </div>
+          <input id="acrylicRange" type="range" min="0" max="80" step="1" value="35">
+
+          <label class="color-row" for="backgroundColor">
+            <span>배경색</span>
+            <span class="color-control">
+              <input id="backgroundColor" type="color" value="#eef0f2">
+              <i id="backgroundValue">#EEF0F2</i>
+            </span>
+          </label>
+        </div>
+
+        <div class="settings-group">
+          <label class="field-label" for="gifMotionSelect">GIF 움직임</label>
+          <select id="gifMotionSelect">
+            <option value="swing">Y축 좌우 왕복 · 권장</option>
+            <option value="spin">Y축 360° 회전</option>
+          </select>
+          <p class="setting-note">좌우 왕복은 정면 인쇄와 옆면을 자연스럽게 보여줍니다.</p>
+        </div>
+
+        <div class="settings-group compact">
+          <button class="button button-light full-width" id="resetViewButton" type="button">시점 초기화</button>
+          <button class="text-button" id="resetProjectButton" type="button">프로젝트 비우기</button>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <template id="layerTemplate">
+    <article class="layer-card" draggable="true">
+      <div class="layer-card-top">
+        <div class="drag-handle" title="드래그해서 순서 변경" aria-label="순서 변경"></div>
+        <span class="layer-number"></span>
+        <div class="layer-title-wrap">
+          <strong class="layer-title"></strong>
+          <span class="layer-file">이미지 없음</span>
+        </div>
+        <label class="visibility-toggle" title="면 표시">
+          <input class="visibility-input" type="checkbox" checked>
+          <span></span>
+        </label>
+      </div>
+      <div class="layer-upload">
+        <input class="file-input" type="file" accept="image/png,image/webp,image/jpeg" hidden>
+        <button class="upload-button" type="button">
+          <span class="upload-preview"></span>
+          <span class="upload-copy"><b>이미지 업로드</b><small>PNG · WEBP · JPG</small></span>
+        </button>
+      </div>
+      <div class="layer-controls">
+        <label>
+          <span>이미지 크기</span>
+          <input class="scale-input" type="range" min="50" max="150" value="100">
+        </label>
+        <div class="layer-card-actions">
+          <button class="fit-button" type="button">맞춤</button>
+          <button class="remove-button" type="button">삭제</button>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <template id="sideTemplate">
+    <article class="side-card">
+      <div class="side-card-heading">
+        <span class="side-icon"></span>
+        <div>
+          <strong class="side-title"></strong>
+          <span class="side-file">이미지 없음</span>
+        </div>
+        <label class="visibility-toggle" title="옆면 표시">
+          <input class="side-visibility-input" type="checkbox" checked>
+          <span></span>
+        </label>
+      </div>
+      <input class="side-file-input" type="file" accept="image/png,image/webp,image/jpeg" hidden>
+      <button class="side-upload-button" type="button">
+        <span class="side-upload-preview"></span>
+        <span><b>옆면 이미지 업로드</b><small>PNG · WEBP · JPG</small></span>
+      </button>
+      <button class="side-remove-button" type="button">옆면 삭제</button>
+    </article>
+  </template>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.js"
+      }
+    }
+  </script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
