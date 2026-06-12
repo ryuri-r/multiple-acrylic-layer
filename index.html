@@ -67,7 +67,10 @@
             <strong>1면에 이미지를 올려보세요</strong>
             <span>클릭해서 이미지 추가 · 여러 장 선택 가능</span>
           </label>
-          <div class="stage-hint">드래그 회전 · 휠 확대</div>
+          <div class="stage-hint">
+            <span>그림 드래그 이동 · 빈 공간 드래그 회전</span>
+            <span>그림 더블클릭 위치 초기화 · 휠 확대</span>
+          </div>
         </div>
 
         <div class="stage-status">
@@ -87,15 +90,15 @@
         <div class="settings-group">
           <label class="switch-row">
             <span>
-              <b>첫 이미지에 맞춰 자동 크기</b>
-              <small>투명 영역을 제외한 그림 비율로 계산</small>
+              <b>전체 이미지에 맞춰 자동 크기</b>
+              <small>모든 면의 투명 영역을 합친 범위로 계산</small>
             </span>
             <input id="autoSizeToggle" type="checkbox" checked>
           </label>
 
           <div class="field-grid">
             <label>
-              <span>그림 긴 변 기준</span>
+              <span>합친 그림 긴 변</span>
               <div class="number-field"><input id="longSideInput" type="number" min="20" max="300" value="135"><i>mm</i></div>
             </label>
             <label>
@@ -106,7 +109,7 @@
               </select>
             </label>
           </div>
-          <p class="setting-note">기본형은 살짝 둥근 직사각형입니다. 칼선 여백은 그림 사방에 적용됩니다.</p>
+          <p class="setting-note">기본형은 살짝 둥근 직사각형입니다. 칼선 여백은 합친 그림 범위 사방에 적용됩니다.</p>
         </div>
 
         <div class="settings-group manual-size-group">
