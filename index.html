@@ -68,8 +68,8 @@
             <span>클릭해서 이미지 추가 · 여러 장 선택 가능</span>
           </label>
           <div class="stage-hint">
-            <span>그림 드래그 이동 · 빈 공간 드래그 회전</span>
-            <span>그림 더블클릭 위치 초기화 · 휠 확대</span>
+            <span>빈 공간 드래그 회전 · 휠 확대</span>
+            <span>이미지 위치는 각 면 카드에서 조정</span>
           </div>
         </div>
 
@@ -206,8 +206,16 @@
           <span>이미지 크기</span>
           <input class="scale-input" type="range" min="50" max="150" value="100">
         </label>
+        <label>
+          <span>가로 위치</span>
+          <input class="offset-x-input" type="range" min="-80" max="80" step="1" value="0">
+        </label>
+        <label>
+          <span>세로 위치</span>
+          <input class="offset-y-input" type="range" min="-80" max="80" step="1" value="0">
+        </label>
         <div class="layer-card-actions">
-          <button class="fit-button" type="button">맞춤</button>
+          <button class="fit-button" type="button">크기·위치 초기화</button>
           <button class="remove-button" type="button">삭제</button>
         </div>
       </div>

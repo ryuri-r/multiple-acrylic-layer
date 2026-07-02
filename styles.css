@@ -404,6 +404,7 @@ h1,
 }
 
 .layer-controls label {
+  margin-top: 8px;
   display: grid;
   grid-template-columns: 68px minmax(0, 1fr);
   align-items: center;

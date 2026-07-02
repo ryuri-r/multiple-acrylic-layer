@@ -121,97 +121,6 @@ scene.add(floor);
 const layerRoot = new THREE.Group();
 scene.add(layerRoot);
 
-// ── 그림 드래그 이동 ──────────────────────────────────────────
-const dragRaycaster = new THREE.Raycaster();
-const dragPointer = new THREE.Vector2();
-let dragSession = null;
-
-function setRayFromEvent(event) {
-  const rect = renderer.domElement.getBoundingClientRect();
-  dragPointer.set(
-    ((event.clientX - rect.left) / rect.width) * 2 - 1,
-    -((event.clientY - rect.top) / rect.height) * 2 + 1,
-  );
-  dragRaycaster.setFromCamera(dragPointer, camera);
-}
-
-function maskAlphaAt(layer, uv) {
-  if (!layer.alphaMask || !uv) return 255;
-  const { data, width, height } = layer.alphaMask;
-  const x = Math.min(width - 1, Math.max(0, Math.floor(uv.x * width)));
-  const y = Math.min(height - 1, Math.max(0, Math.floor((1 - uv.y) * height)));
-  return data[y * width + x];
-}
-
-function rayPointAtZ(z) {
-  const { origin, direction } = dragRaycaster.ray;
-  if (Math.abs(direction.z) < 1e-6) return null;
-  const t = (z - origin.z) / direction.z;
-  if (t < 0) return null;
-  return origin.clone().addScaledVector(direction, t);
-}
-
-renderer.domElement.addEventListener("pointerdown", (event) => {
-  if (event.button !== 0) return;
-  setRayFromEvent(event);
-  const hits = dragRaycaster.intersectObjects(artMeshes, false);
-  // 투명 픽셀 위는 통과시키고, 실제 그림이 그려진 첫 레이어를 잡는다
-  const hit = hits.find((item) => {
-    const layer = state.layers.find((l) => l.id === item.object.userData.layerId);
-    return layer && maskAlphaAt(layer, item.uv) > 16;
-  });
-  if (!hit) return;
-  const layer = state.layers.find((l) => l.id === hit.object.userData.layerId);
-  dragSession = {
-    layer,
-    mesh: hit.object,
-    planeZ: hit.point.z,
-    startPoint: hit.point.clone(),
-    startOffsetX: layer.offsetX,
-    startOffsetY: layer.offsetY,
-    baseX: hit.object.position.x - layer.offsetX,
-    baseY: hit.object.position.y - layer.offsetY,
-  };
-  controls.enabled = false;
-  renderer.domElement.setPointerCapture(event.pointerId);
-  renderer.domElement.style.cursor = "grabbing";
-});
-
-renderer.domElement.addEventListener("pointermove", (event) => {
-  if (!dragSession) return;
-  setRayFromEvent(event);
-  const point = rayPointAtZ(dragSession.planeZ);
-  if (!point) return;
-  dragSession.layer.offsetX = dragSession.startOffsetX + point.x - dragSession.startPoint.x;
-  dragSession.layer.offsetY = dragSession.startOffsetY + point.y - dragSession.startPoint.y;
-  dragSession.mesh.position.x = dragSession.baseX + dragSession.layer.offsetX;
-  dragSession.mesh.position.y = dragSession.baseY + dragSession.layer.offsetY;
-});
-
-function endDrag() {
-  if (!dragSession) return;
-  dragSession = null;
-  controls.enabled = true;
-  renderer.domElement.style.cursor = "";
-}
-renderer.domElement.addEventListener("pointerup", endDrag);
-renderer.domElement.addEventListener("pointercancel", endDrag);
-
-// 더블클릭으로 해당 레이어 위치 초기화
-renderer.domElement.addEventListener("dblclick", (event) => {
-  setRayFromEvent(event);
-  const hits = dragRaycaster.intersectObjects(artMeshes, false);
-  const hit = hits.find((item) => {
-    const layer = state.layers.find((l) => l.id === item.object.userData.layerId);
-    return layer && maskAlphaAt(layer, item.uv) > 16;
-  });
-  if (!hit) return;
-  const layer = state.layers.find((l) => l.id === hit.object.userData.layerId);
-  layer.offsetX = 0;
-  layer.offsetY = 0;
-  rebuildScene();
-});
-
 function createLayerData() {
   return {
     id: state.nextId++,
@@ -222,7 +131,6 @@ function createLayerData() {
     contentAspect: null,
     canvasAspect: null,
     crop: null,
-    alphaMask: null,
     scale: 1,
     offsetX: 0,
     offsetY: 0,
@@ -255,10 +163,7 @@ function disposeObject(object) {
   });
 }
 
-const artMeshes = [];
-
 function clearLayerRoot() {
-  artMeshes.length = 0;
   while (layerRoot.children.length) {
     const child = layerRoot.children.pop();
     disposeObject(child);
@@ -349,8 +254,6 @@ function createAcrylicObject(layer, index) {
     art.position.x = offsetX + layer.offsetX;
     art.position.y = offsetY + layer.offsetY;
     art.position.z = state.thickness / 2 + 0.08;
-    art.userData.layerId = layer.id;
-    artMeshes.push(art);
     group.add(art);
   }
 
@@ -378,6 +281,8 @@ function renderLayerList() {
     const preview = fragment.querySelector(".upload-preview");
     const visibilityInput = fragment.querySelector(".visibility-input");
     const scaleInput = fragment.querySelector(".scale-input");
+    const offsetXInput = fragment.querySelector(".offset-x-input");
+    const offsetYInput = fragment.querySelector(".offset-y-input");
     const removeButton = fragment.querySelector(".remove-button");
     const fitButton = fragment.querySelector(".fit-button");
 
@@ -387,6 +292,8 @@ function renderLayerList() {
     fragment.querySelector(".layer-file").textContent = layer.fileName || "이미지 없음";
     visibilityInput.checked = layer.visible;
     scaleInput.value = String(Math.round(layer.scale * 100));
+    offsetXInput.value = String(Math.round(layer.offsetX));
+    offsetYInput.value = String(Math.round(layer.offsetY));
 
     if (layer.imageUrl) {
       card.classList.add("has-image");
@@ -410,8 +317,20 @@ function renderLayerList() {
       rebuildScene();
     });
 
+    offsetXInput.addEventListener("input", () => {
+      layer.offsetX = Number(offsetXInput.value);
+      rebuildScene();
+    });
+
+    offsetYInput.addEventListener("input", () => {
+      layer.offsetY = Number(offsetYInput.value);
+      rebuildScene();
+    });
+
     fitButton.addEventListener("click", () => {
       layer.scale = 1;
+      layer.offsetX = 0;
+      layer.offsetY = 0;
       renderLayerList();
       rebuildScene();
     });
@@ -471,7 +390,6 @@ function loadImageForLayer(id, file) {
       layer.contentAspect = analysis.aspect;
       layer.canvasAspect = analysis.canvasAspect;
       layer.crop = analysis.crop;
-      layer.alphaMask = analysis.mask;
       recomputeAutoSize();
       if (!state.paletteApplied && analysis.color && state.autoSizeSourceId === layer.id) {
         state.paletteApplied = true;
@@ -567,13 +485,9 @@ async function analyzeImageFile(file) {
   const contentWidth = maxX >= minX ? maxX - minX + 1 : width;
   const contentHeight = maxY >= minY ? maxY - minY + 1 : height;
   const hasTransparentBounds = maxX >= minX && maxY >= minY;
-  const mask = new Uint8Array(width * height);
-  for (let i = 0; i < width * height; i += 1) mask[i] = pixels[i * 4 + 3];
-
   return {
     aspect: contentWidth / contentHeight,
     canvasAspect: width / height,
-    mask: { data: mask, width, height },
     crop: hasTransparentBounds
       ? {
           x: minX / width,
